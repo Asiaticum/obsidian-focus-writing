@@ -428,6 +428,141 @@ var FrontmatterHidingEffect = class {
 
 // src/effects/typewriter-scroll-effect.ts
 var import_view2 = require("@codemirror/view");
+var dragStateMap = /* @__PURE__ */ new WeakMap();
+function getDragState(view) {
+  let state = dragStateMap.get(view);
+  if (!state) {
+    state = { isDragging: false, hasPendingScroll: false, autoScrollInterval: null };
+    dragStateMap.set(view, state);
+  }
+  return state;
+}
+function startAutoScroll(view, dragState) {
+  if (dragState.autoScrollInterval !== null) {
+    return;
+  }
+  let lastMouseY = 0;
+  const EDGE_THRESHOLD = 80;
+  const MAX_SCROLL_SPEED = 20;
+  const MIN_SCROLL_SPEED = 3;
+  const handleMouseMove = (e) => {
+    lastMouseY = e.clientY;
+  };
+  const scrollInterval = window.setInterval(() => {
+    if (!dragState.isDragging) {
+      stopAutoScroll(view, dragState);
+      return;
+    }
+    const scrollRect = view.scrollDOM.getBoundingClientRect();
+    const distanceFromTop = lastMouseY - scrollRect.top;
+    const distanceFromBottom = scrollRect.bottom - lastMouseY;
+    let scrollAmount = 0;
+    if (distanceFromTop < EDGE_THRESHOLD && distanceFromTop > 0) {
+      const intensity = 1 - distanceFromTop / EDGE_THRESHOLD;
+      scrollAmount = -(MIN_SCROLL_SPEED + (MAX_SCROLL_SPEED - MIN_SCROLL_SPEED) * intensity);
+    } else if (distanceFromBottom < EDGE_THRESHOLD && distanceFromBottom > 0) {
+      const intensity = 1 - distanceFromBottom / EDGE_THRESHOLD;
+      scrollAmount = MIN_SCROLL_SPEED + (MAX_SCROLL_SPEED - MIN_SCROLL_SPEED) * intensity;
+    }
+    if (scrollAmount !== 0) {
+      view.scrollDOM.scrollBy({
+        top: scrollAmount,
+        behavior: "auto"
+        // Use 'auto' for smooth continuous scrolling
+      });
+    }
+  }, 16);
+  document.addEventListener("mousemove", handleMouseMove);
+  dragState.autoScrollInterval = scrollInterval;
+  dragState.autoScrollMouseMove = handleMouseMove;
+}
+function stopAutoScroll(view, dragState) {
+  if (dragState.autoScrollInterval !== null) {
+    clearInterval(dragState.autoScrollInterval);
+    dragState.autoScrollInterval = null;
+    const handleMouseMove = dragState.autoScrollMouseMove;
+    if (handleMouseMove) {
+      document.removeEventListener("mousemove", handleMouseMove);
+      delete dragState.autoScrollMouseMove;
+    }
+  }
+}
+function performTypewriterScroll(view, offsetPercent) {
+  const cursorPos = view.state.selection.main.head;
+  const cursorCoords = view.coordsAtPos(cursorPos);
+  if (!cursorCoords) {
+    console.log("[TypewriterScroll Extension] No cursor coords");
+    return;
+  }
+  const viewportHeight = view.scrollDOM.clientHeight;
+  const scrollTop = view.scrollDOM.scrollTop;
+  const cursorRelativeToViewport = cursorCoords.top - view.scrollDOM.getBoundingClientRect().top;
+  const targetPosition = viewportHeight * (offsetPercent / 100);
+  const scrollAdjustment = cursorRelativeToViewport - targetPosition;
+  console.log(
+    "[TypewriterScroll Extension] Scrolling - cursorY:",
+    cursorRelativeToViewport,
+    "target:",
+    targetPosition,
+    "adjustment:",
+    scrollAdjustment
+  );
+  if (Math.abs(scrollAdjustment) > 1) {
+    const newScrollTop = scrollTop + scrollAdjustment;
+    view.scrollDOM.scrollTo({
+      top: newScrollTop,
+      behavior: "smooth"
+    });
+  }
+}
+var eventListenersMap = /* @__PURE__ */ new WeakMap();
+var contentElToViewMap = /* @__PURE__ */ new WeakMap();
+function setupMouseEventListeners(view, contentEl) {
+  if (eventListenersMap.has(view)) {
+    return;
+  }
+  contentElToViewMap.set(contentEl, view);
+  const dragState = getDragState(view);
+  const handleMouseDown = (e) => {
+    if (e.button === 0) {
+      console.log("[TypewriterScroll] Mouse down - drag started");
+      dragState.isDragging = true;
+      startAutoScroll(view, dragState);
+    }
+  };
+  const handleMouseUp = (e) => {
+    if (dragState.isDragging) {
+      console.log("[TypewriterScroll] Mouse up - drag ended, hasPendingScroll:", dragState.hasPendingScroll);
+      dragState.isDragging = false;
+      stopAutoScroll(view, dragState);
+      if (dragState.hasPendingScroll) {
+        dragState.hasPendingScroll = false;
+        const offsetPercent = parseInt(contentEl.dataset.typewriterOffset || "50", 10);
+        performTypewriterScroll(view, offsetPercent);
+      }
+    }
+  };
+  view.contentDOM.addEventListener("mousedown", handleMouseDown, true);
+  document.addEventListener("mouseup", handleMouseUp);
+  eventListenersMap.set(view, {
+    mousedown: handleMouseDown,
+    mouseup: handleMouseUp
+  });
+  console.log("[TypewriterScroll] Event listeners setup complete");
+}
+function cleanupMouseEventListeners(view) {
+  const listeners = eventListenersMap.get(view);
+  if (listeners) {
+    const dragState = dragStateMap.get(view);
+    if (dragState) {
+      stopAutoScroll(view, dragState);
+    }
+    view.contentDOM.removeEventListener("mousedown", listeners.mousedown, true);
+    document.removeEventListener("mouseup", listeners.mouseup);
+    eventListenersMap.delete(view);
+    console.log("[TypewriterScroll] Event listeners cleaned up");
+  }
+}
 var TypewriterScrollEffect = class {
   constructor(plugin) {
     this.plugin = plugin;
@@ -453,6 +588,11 @@ var TypewriterScrollEffect = class {
   }
   disable(leaf) {
     const contentEl = leaf.view.contentEl;
+    const view = contentElToViewMap.get(contentEl);
+    if (view) {
+      cleanupMouseEventListeners(view);
+      contentElToViewMap.delete(contentEl);
+    }
     contentEl.classList.remove("focus-mode-typewriter");
     delete contentEl.dataset.typewriterOffset;
   }
@@ -482,35 +622,17 @@ TypewriterScrollEffect.extension = import_view2.EditorView.updateListener.of((up
   );
   if (!contentEl)
     return;
+  setupMouseEventListeners(update.view, contentEl);
   if (!update.selectionSet && !update.docChanged)
     return;
-  const offsetPercent = parseInt(contentEl.dataset.typewriterOffset || "50", 10);
-  const cursorPos = update.state.selection.main.head;
-  const cursorCoords = update.view.coordsAtPos(cursorPos);
-  if (!cursorCoords) {
-    console.log("[TypewriterScroll Extension] No cursor coords");
+  const dragState = getDragState(update.view);
+  if (dragState.isDragging) {
+    console.log("[TypewriterScroll Extension] Dragging detected - deferring scroll");
+    dragState.hasPendingScroll = true;
     return;
   }
-  const viewportHeight = update.view.scrollDOM.clientHeight;
-  const scrollTop = update.view.scrollDOM.scrollTop;
-  const cursorRelativeToViewport = cursorCoords.top - update.view.scrollDOM.getBoundingClientRect().top;
-  const targetPosition = viewportHeight * (offsetPercent / 100);
-  const scrollAdjustment = cursorRelativeToViewport - targetPosition;
-  console.log(
-    "[TypewriterScroll Extension] Scrolling - cursorY:",
-    cursorRelativeToViewport,
-    "target:",
-    targetPosition,
-    "adjustment:",
-    scrollAdjustment
-  );
-  if (Math.abs(scrollAdjustment) > 1) {
-    const newScrollTop = scrollTop + scrollAdjustment;
-    update.view.scrollDOM.scrollTo({
-      top: newScrollTop,
-      behavior: "smooth"
-    });
-  }
+  const offsetPercent = parseInt(contentEl.dataset.typewriterOffset || "50", 10);
+  performTypewriterScroll(update.view, offsetPercent);
 });
 
 // src/effects/chrome-hiding-effect.ts
