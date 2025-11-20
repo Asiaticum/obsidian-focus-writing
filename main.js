@@ -27,7 +27,7 @@ __export(main_exports, {
   default: () => FocusModePlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian3 = require("obsidian");
+var import_obsidian4 = require("obsidian");
 
 // src/settings.ts
 var import_obsidian = require("obsidian");
@@ -37,7 +37,9 @@ var DEFAULT_SETTINGS = {
   enableTypewriterScroll: false,
   typewriterOffset: 30,
   enableFrontmatterHiding: true,
-  enableZenUi: true
+  enableZenUi: true,
+  enableStatisticsDisplay: true,
+  statisticsToShow: ["characters", "words"]
 };
 var FocusModeSettingTab = class extends import_obsidian.PluginSettingTab {
   constructor(app, plugin) {
@@ -86,6 +88,38 @@ var FocusModeSettingTab = class extends import_obsidian.PluginSettingTab {
         await this.plugin.saveSettings();
       })
     );
+    containerEl.createEl("h3", { text: "Statistics Display" });
+    new import_obsidian.Setting(containerEl).setName("Show Statistics").setDesc("Display writing statistics in the bottom-right corner").addToggle(
+      (toggle) => toggle.setValue(this.plugin.settings.enableStatisticsDisplay).onChange(async (value) => {
+        this.plugin.settings.enableStatisticsDisplay = value;
+        await this.plugin.saveSettings();
+      })
+    );
+    new import_obsidian.Setting(containerEl).setName("Statistics to Display").setDesc("Select which statistics to show").setClass("statistics-checkboxes");
+    const statisticsContainer = containerEl.createDiv({ cls: "statistics-options" });
+    const statisticOptions = [
+      { key: "characters", label: "\u6587\u5B57\u6570\uFF08\u30B9\u30DA\u30FC\u30B9\u542B\u3080\uFF09" },
+      { key: "charactersNoSpaces", label: "\u6587\u5B57\u6570\uFF08\u30B9\u30DA\u30FC\u30B9\u9664\u304F\uFF09" },
+      { key: "words", label: "\u5358\u8A9E\u6570" },
+      { key: "lines", label: "\u884C\u6570" },
+      { key: "paragraphs", label: "\u6BB5\u843D\u6570" }
+    ];
+    statisticOptions.forEach((option) => {
+      new import_obsidian.Setting(statisticsContainer).setName(option.label).addToggle(
+        (toggle) => toggle.setValue(this.plugin.settings.statisticsToShow.includes(option.key)).onChange(async (value) => {
+          if (value) {
+            if (!this.plugin.settings.statisticsToShow.includes(option.key)) {
+              this.plugin.settings.statisticsToShow.push(option.key);
+            }
+          } else {
+            this.plugin.settings.statisticsToShow = this.plugin.settings.statisticsToShow.filter(
+              (stat) => stat !== option.key
+            );
+          }
+          await this.plugin.saveSettings();
+        })
+      );
+    });
   }
 };
 
@@ -97,6 +131,9 @@ var FocusController = class {
   }
   addEffect(effect) {
     this.effects.push(effect);
+  }
+  isActive() {
+    return this.isFocusModeActive;
   }
   activate(leaf) {
     console.log("[FocusController] activate() called");
@@ -142,8 +179,8 @@ var ContextObserver = class {
   updateSettings(settings) {
     this.settings = settings;
   }
-  onActiveLeafChange(leaf) {
-    console.log("[ContextObserver] onActiveLeafChange called");
+  onActiveLeafChange(leaf, forceUpdate = false) {
+    console.log("[ContextObserver] onActiveLeafChange called, forceUpdate:", forceUpdate);
     if (!leaf || !leaf.view)
       return;
     if (leaf.view instanceof import_obsidian2.FileView) {
@@ -152,7 +189,11 @@ var ContextObserver = class {
         const shouldActivate = this.shouldActivate(file);
         console.log("[ContextObserver] File:", file.path, "shouldActivate:", shouldActivate);
         if (shouldActivate) {
-          this.controller.activate(leaf);
+          if (forceUpdate && this.controller.isActive()) {
+            this.controller.update(leaf);
+          } else {
+            this.controller.activate(leaf);
+          }
         } else {
           this.controller.deactivate(leaf);
         }
@@ -545,17 +586,60 @@ SentenceFocusEffect.extension = import_view3.ViewPlugin.fromClass(
         const relativePos = pos - line.from;
         let start = 0;
         let end = text.length;
-        const delimiters = /[.!?。！？」]/;
+        const sentenceEndPunctuation = /[.!?。！？]/;
+        const closingQuotes = /[」』]/;
         for (let i = relativePos - 1; i >= 0; i--) {
-          if (delimiters.test(text[i])) {
-            start = i + 1;
-            break;
+          const char = text[i];
+          if (sentenceEndPunctuation.test(char)) {
+            const nextChar = i + 1 < text.length ? text[i + 1] : "";
+            const charAfterNext = i + 2 < text.length ? text[i + 2] : "";
+            if (closingQuotes.test(nextChar)) {
+              if (charAfterNext && charAfterNext.trim()) {
+                continue;
+              } else {
+                start = i + 2;
+                break;
+              }
+            } else {
+              start = i + 1;
+              break;
+            }
+          } else if (closingQuotes.test(char)) {
+            const nextChar = i + 1 < text.length ? text[i + 1] : "";
+            if (!nextChar || !nextChar.trim()) {
+              start = i + 1;
+              break;
+            }
           }
         }
         for (let i = relativePos; i < text.length; i++) {
-          if (delimiters.test(text[i])) {
-            end = i + 1;
-            break;
+          const char = text[i];
+          if (sentenceEndPunctuation.test(char)) {
+            const nextChar = i + 1 < text.length ? text[i + 1] : "";
+            const charAfterNext = i + 2 < text.length ? text[i + 2] : "";
+            if (closingQuotes.test(nextChar)) {
+              if (charAfterNext && charAfterNext.trim()) {
+                continue;
+              } else {
+                end = i + 2;
+                break;
+              }
+            } else {
+              end = i + 1;
+              break;
+            }
+          } else if (closingQuotes.test(char)) {
+            let hasTextAfter = false;
+            for (let j = i + 1; j < text.length; j++) {
+              if (text[j].trim()) {
+                hasTextAfter = true;
+                break;
+              }
+            }
+            if (!hasTextAfter) {
+              end = i + 1;
+              break;
+            }
           }
         }
         activeRanges.push({ from: line.from + start, to: line.from + end });
@@ -680,8 +764,148 @@ ActiveLineFocusEffect.extension = import_view4.ViewPlugin.fromClass(
   }
 );
 
+// src/effects/statistics-display-effect.ts
+var import_obsidian3 = require("obsidian");
+var import_view5 = require("@codemirror/view");
+var StatisticsDisplayEffect = class {
+  constructor(app, plugin) {
+    this.app = app;
+    this.plugin = plugin;
+  }
+  enable(leaf) {
+    if (!this.plugin.settings.enableStatisticsDisplay)
+      return;
+    const view = leaf.view;
+    if (!(view instanceof import_obsidian3.MarkdownView))
+      return;
+    const contentEl = view.contentEl;
+    if (!contentEl.querySelector(".focus-mode-statistics-overlay")) {
+      const overlayElement = createDiv({ cls: "focus-mode-statistics-overlay" });
+      contentEl.appendChild(overlayElement);
+      contentEl.dataset.statisticsEnabled = "true";
+      contentEl.dataset.statisticsToShow = JSON.stringify(this.plugin.settings.statisticsToShow);
+      this.updateOverlay(view, overlayElement);
+    }
+  }
+  disable(leaf) {
+    const view = leaf.view;
+    if (!(view instanceof import_obsidian3.MarkdownView))
+      return;
+    const contentEl = view.contentEl;
+    const overlayElement = contentEl.querySelector(".focus-mode-statistics-overlay");
+    if (overlayElement) {
+      overlayElement.remove();
+    }
+    delete contentEl.dataset.statisticsEnabled;
+    delete contentEl.dataset.statisticsToShow;
+  }
+  update(leaf) {
+    const view = leaf.view;
+    if (!(view instanceof import_obsidian3.MarkdownView))
+      return;
+    const contentEl = view.contentEl;
+    const overlayElement = contentEl.querySelector(".focus-mode-statistics-overlay");
+    if (this.plugin.settings.enableStatisticsDisplay) {
+      contentEl.dataset.statisticsEnabled = "true";
+      contentEl.dataset.statisticsToShow = JSON.stringify(this.plugin.settings.statisticsToShow);
+      if (!overlayElement) {
+        this.enable(leaf);
+      } else {
+        this.updateOverlay(view, overlayElement);
+      }
+    } else {
+      if (overlayElement) {
+        this.disable(leaf);
+      }
+    }
+  }
+  updateOverlay(view, overlayElement) {
+    const editor = view.editor;
+    if (!editor)
+      return;
+    const text = editor.getValue();
+    const stats = this.calculateStatistics(text);
+    const statisticsToShow = this.plugin.settings.statisticsToShow || ["characters", "words"];
+    this.renderStatistics(overlayElement, stats, statisticsToShow);
+  }
+  calculateStatistics(text) {
+    const characters = text.length;
+    const charactersNoSpaces = text.replace(/\s/g, "").length;
+    const words = text.trim().split(/\s+/).filter((word) => word.length > 0).length;
+    const lines = text.split("\n").length;
+    const paragraphs = text.split(/\n\s*\n/).filter((para) => para.trim().length > 0).length;
+    return {
+      characters,
+      charactersNoSpaces,
+      words,
+      lines,
+      paragraphs
+    };
+  }
+  renderStatistics(overlayElement, stats, statsToShow) {
+    overlayElement.empty();
+    const displayOrder = [
+      { key: "characters", label: "\u6587\u5B57\u6570", value: stats.characters },
+      { key: "charactersNoSpaces", label: "\u6587\u5B57\u6570\uFF08\u7A7A\u767D\u9664\u304F\uFF09", value: stats.charactersNoSpaces },
+      { key: "words", label: "\u5358\u8A9E\u6570", value: stats.words },
+      { key: "lines", label: "\u884C\u6570", value: stats.lines },
+      { key: "paragraphs", label: "\u6BB5\u843D\u6570", value: stats.paragraphs }
+    ];
+    displayOrder.forEach((stat) => {
+      if (!statsToShow.includes(stat.key))
+        return;
+      const statItem = overlayElement.createDiv({ cls: "stat-item" });
+      statItem.createSpan({ cls: "stat-label", text: stat.label + ": " });
+      statItem.createSpan({ cls: "stat-value", text: this.formatNumber(stat.value) });
+    });
+  }
+  formatNumber(num) {
+    return num.toLocaleString();
+  }
+};
+StatisticsDisplayEffect.extension = import_view5.EditorView.updateListener.of((update) => {
+  var _a;
+  const contentEl = (_a = update.view.contentDOM.closest(".markdown-source-view")) == null ? void 0 : _a.parentElement;
+  if (!contentEl || contentEl.dataset.statisticsEnabled !== "true")
+    return;
+  if (!update.docChanged)
+    return;
+  const overlayElement = contentEl.querySelector(".focus-mode-statistics-overlay");
+  if (!overlayElement)
+    return;
+  const text = update.state.doc.toString();
+  const characters = text.length;
+  const charactersNoSpaces = text.replace(/\s/g, "").length;
+  const words = text.trim().split(/\s+/).filter((word) => word.length > 0).length;
+  const lines = text.split("\n").length;
+  const paragraphs = text.split(/\n\s*\n/).filter((para) => para.trim().length > 0).length;
+  const stats = {
+    characters,
+    charactersNoSpaces,
+    words,
+    lines,
+    paragraphs
+  };
+  const statisticsToShow = JSON.parse(contentEl.dataset.statisticsToShow || '["characters", "words"]');
+  overlayElement.empty();
+  const displayOrder = [
+    { key: "characters", label: "\u6587\u5B57\u6570", value: stats.characters },
+    { key: "charactersNoSpaces", label: "\u6587\u5B57\u6570\uFF08\u7A7A\u767D\u9664\u304F\uFF09", value: stats.charactersNoSpaces },
+    { key: "words", label: "\u5358\u8A9E\u6570", value: stats.words },
+    { key: "lines", label: "\u884C\u6570", value: stats.lines },
+    { key: "paragraphs", label: "\u6BB5\u843D\u6570", value: stats.paragraphs }
+  ];
+  displayOrder.forEach((stat) => {
+    if (!statisticsToShow.includes(stat.key))
+      return;
+    const statItem = overlayElement.createDiv({ cls: "stat-item" });
+    statItem.createSpan({ cls: "stat-label", text: stat.label + ": " });
+    statItem.createSpan({ cls: "stat-value", text: stat.value.toLocaleString() });
+  });
+});
+
 // src/main.ts
-var FocusModePlugin = class extends import_obsidian3.Plugin {
+var FocusModePlugin = class extends import_obsidian4.Plugin {
   async onload() {
     await this.loadSettings();
     this.controller = new FocusController();
@@ -692,6 +916,7 @@ var FocusModePlugin = class extends import_obsidian3.Plugin {
     const chromeHidingEffect = new ChromeHidingEffect(this.app, this);
     const sentenceFocusEffect = new SentenceFocusEffect(this);
     const activeLineFocusEffect = new ActiveLineFocusEffect(this);
+    const statisticsDisplayEffect = new StatisticsDisplayEffect(this.app, this);
     this.controller.addEffect(zenUiEffect);
     this.controller.addEffect(paragraphDimmerEffect);
     this.controller.addEffect(frontmatterHidingEffect);
@@ -699,6 +924,7 @@ var FocusModePlugin = class extends import_obsidian3.Plugin {
     this.controller.addEffect(chromeHidingEffect);
     this.controller.addEffect(sentenceFocusEffect);
     this.controller.addEffect(activeLineFocusEffect);
+    this.controller.addEffect(statisticsDisplayEffect);
     console.log("[Main] Registering CM6 Extensions");
     console.log("[Main] ParagraphDimmerEffect.extension:", ParagraphDimmerEffect.extension);
     this.registerEditorExtension(ParagraphDimmerEffect.extension);
@@ -708,6 +934,8 @@ var FocusModePlugin = class extends import_obsidian3.Plugin {
     this.registerEditorExtension(SentenceFocusEffect.extension);
     console.log("[Main] ActiveLineFocusEffect.extension:", ActiveLineFocusEffect.extension);
     this.registerEditorExtension(ActiveLineFocusEffect.extension);
+    console.log("[Main] StatisticsDisplayEffect.extension:", StatisticsDisplayEffect.extension);
+    this.registerEditorExtension(StatisticsDisplayEffect.extension);
     this.observer = new ContextObserver(this.app, this.controller, this.settings);
     this.registerEvent(
       this.app.workspace.on("active-leaf-change", (leaf) => {
@@ -809,7 +1037,7 @@ var FocusModePlugin = class extends import_obsidian3.Plugin {
     }
     const activeLeaf = this.app.workspace.getLeaf(false);
     if (activeLeaf) {
-      this.observer.onActiveLeafChange(activeLeaf);
+      this.observer.onActiveLeafChange(activeLeaf, true);
     }
   }
 };

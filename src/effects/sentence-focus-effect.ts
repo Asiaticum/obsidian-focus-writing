@@ -80,27 +80,96 @@ export class SentenceFocusEffect implements IFocusEffect {
 
                     // Simple sentence detection within the line
                     // Look for delimiters: . ! ? 。
-                    // This is a naive implementation.
+                    // Handle Japanese quotation marks properly
 
                     let start = 0;
                     let end = text.length;
 
-                    // Find start of sentence (last delimiter before cursor)
-                    const delimiters = /[.!?。！？」]/;
+                    // Define punctuation patterns
+                    const sentenceEndPunctuation = /[.!?。！？]/;
+                    const closingQuotes = /[」』]/;
 
-                    // Scan backwards from relativePos
+                    // Scan backwards from relativePos to find sentence start
                     for (let i = relativePos - 1; i >= 0; i--) {
-                        if (delimiters.test(text[i])) {
-                            start = i + 1;
-                            break;
+                        const char = text[i];
+
+                        if (sentenceEndPunctuation.test(char)) {
+                            // Found punctuation. Check if followed by closing quote
+                            const nextChar = i + 1 < text.length ? text[i + 1] : '';
+                            const charAfterNext = i + 2 < text.length ? text[i + 2] : '';
+
+                            if (closingQuotes.test(nextChar)) {
+                                // Punctuation followed by quote
+                                // Check if there's non-whitespace text after the quote
+                                if (charAfterNext && charAfterNext.trim()) {
+                                    // There's more text, not a sentence boundary
+                                    continue;
+                                } else {
+                                    // No text after quote, this is a sentence boundary
+                                    start = i + 2;
+                                    break;
+                                }
+                            } else {
+                                // Punctuation not followed by quote
+                                start = i + 1;
+                                break;
+                            }
+                        } else if (closingQuotes.test(char)) {
+                            // Found closing quote
+                            const nextChar = i + 1 < text.length ? text[i + 1] : '';
+
+                            // Check if there's nothing meaningful after the quote
+                            if (!nextChar || !nextChar.trim()) {
+                                // This is a sentence boundary (quote-only sentence)
+                                start = i + 1;
+                                break;
+                            }
+                            // If there's text after, continue scanning
                         }
                     }
 
-                    // Scan forwards from relativePos
+                    // Scan forwards from relativePos to find sentence end
                     for (let i = relativePos; i < text.length; i++) {
-                        if (delimiters.test(text[i])) {
-                            end = i + 1; // Include the delimiter
-                            break;
+                        const char = text[i];
+
+                        if (sentenceEndPunctuation.test(char)) {
+                            // Found punctuation. Check if followed by closing quote
+                            const nextChar = i + 1 < text.length ? text[i + 1] : '';
+                            const charAfterNext = i + 2 < text.length ? text[i + 2] : '';
+
+                            if (closingQuotes.test(nextChar)) {
+                                // Punctuation followed by quote
+                                // Check if there's non-whitespace text after the quote
+                                if (charAfterNext && charAfterNext.trim()) {
+                                    // There's more text, not a sentence boundary
+                                    continue;
+                                } else {
+                                    // No text after quote, this is a sentence boundary
+                                    end = i + 2; // Include both punctuation and quote
+                                    break;
+                                }
+                            } else {
+                                // Punctuation not followed by quote
+                                end = i + 1;
+                                break;
+                            }
+                        } else if (closingQuotes.test(char)) {
+                            // Found closing quote
+                            // Check if there's text after the quote
+                            let hasTextAfter = false;
+                            for (let j = i + 1; j < text.length; j++) {
+                                if (text[j].trim()) {
+                                    hasTextAfter = true;
+                                    break;
+                                }
+                            }
+
+                            if (!hasTextAfter) {
+                                // No text after quote, this is a sentence boundary
+                                end = i + 1;
+                                break;
+                            }
+                            // If there's text after, continue scanning
                         }
                     }
 

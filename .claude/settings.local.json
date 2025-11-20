@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nAdd statistics display feature with real-time updates\n\nFeatures:\n- Display writing statistics in bottom-right corner during focus mode\n- Real-time updates while typing (using CodeMirror 6 extension)\n- Settings auto-update without reload (using forceUpdate mechanism)\n- Configurable statistics: character count (with/without spaces), word count, line count, paragraph count\n- Fixed display order for consistency\n- Japanese labels for all statistics\n- Theme-aware styling with hover effects\n\nTechnical changes:\n- Created StatisticsDisplayEffect with CM6 updateListener extension\n- Added enableStatisticsDisplay and statisticsToShow to settings\n- Implemented isActive() method in FocusController\n- Enhanced ContextObserver to support forceUpdate flag for settings changes\n- Registered StatisticsDisplayEffect extension in main.ts\n- Fixed display order to match: characters, charactersNoSpaces, words, lines, paragraphs\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
     ],
     "deny": [],
     "ask": []

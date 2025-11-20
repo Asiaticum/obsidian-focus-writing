@@ -1,6 +1,7 @@
 import { App, PluginSettingTab, Setting, Plugin } from "obsidian";
 
 export type VisualEffectType = "none" | "paragraph" | "sentence" | "active-line";
+export type StatisticType = "characters" | "charactersNoSpaces" | "words" | "lines" | "paragraphs";
 
 export interface FocusModeSettings {
     focusFolderPaths: string[];
@@ -9,6 +10,8 @@ export interface FocusModeSettings {
     typewriterOffset: number; // 0-100 percentage
     enableFrontmatterHiding: boolean;
     enableZenUi: boolean;
+    enableStatisticsDisplay: boolean;
+    statisticsToShow: StatisticType[];
 }
 
 export const DEFAULT_SETTINGS: FocusModeSettings = {
@@ -17,7 +20,9 @@ export const DEFAULT_SETTINGS: FocusModeSettings = {
     enableTypewriterScroll: false,
     typewriterOffset: 30,
     enableFrontmatterHiding: true,
-    enableZenUi: true
+    enableZenUi: true,
+    enableStatisticsDisplay: true,
+    statisticsToShow: ["characters", "words"]
 };
 
 interface IFocusModePlugin extends Plugin {
@@ -125,5 +130,55 @@ export class FocusModeSettingTab extends PluginSettingTab {
                         await this.plugin.saveSettings();
                     })
             );
+
+        containerEl.createEl("h3", { text: "Statistics Display" });
+
+        new Setting(containerEl)
+            .setName("Show Statistics")
+            .setDesc("Display writing statistics in the bottom-right corner")
+            .addToggle((toggle) =>
+                toggle
+                    .setValue(this.plugin.settings.enableStatisticsDisplay)
+                    .onChange(async (value) => {
+                        this.plugin.settings.enableStatisticsDisplay = value;
+                        await this.plugin.saveSettings();
+                    })
+            );
+
+        new Setting(containerEl)
+            .setName("Statistics to Display")
+            .setDesc("Select which statistics to show")
+            .setClass("statistics-checkboxes");
+
+        const statisticsContainer = containerEl.createDiv({ cls: "statistics-options" });
+
+        const statisticOptions = [
+            { key: "characters", label: "文字数（スペース含む）" },
+            { key: "charactersNoSpaces", label: "文字数（スペース除く）" },
+            { key: "words", label: "単語数" },
+            { key: "lines", label: "行数" },
+            { key: "paragraphs", label: "段落数" }
+        ];
+
+        statisticOptions.forEach((option) => {
+            new Setting(statisticsContainer)
+                .setName(option.label)
+                .addToggle((toggle) =>
+                    toggle
+                        .setValue(this.plugin.settings.statisticsToShow.includes(option.key as StatisticType))
+                        .onChange(async (value) => {
+                            if (value) {
+                                if (!this.plugin.settings.statisticsToShow.includes(option.key as StatisticType)) {
+                                    this.plugin.settings.statisticsToShow.push(option.key as StatisticType);
+                                }
+                            } else {
+                                this.plugin.settings.statisticsToShow = this.plugin.settings.statisticsToShow.filter(
+                                    (stat) => stat !== option.key
+                                );
+                            }
+                            await this.plugin.saveSettings();
+                        })
+                );
+        });
     }
 }

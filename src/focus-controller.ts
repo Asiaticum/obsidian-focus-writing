@@ -12,6 +12,10 @@ export class FocusController {
         this.effects.push(effect);
     }
 
+    isActive(): boolean {
+        return this.isFocusModeActive;
+    }
+
     activate(leaf: WorkspaceLeaf) {
         console.log("[FocusController] activate() called");
         this.isFocusModeActive = true;

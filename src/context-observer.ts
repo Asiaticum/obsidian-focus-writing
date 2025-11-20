@@ -17,8 +17,8 @@ export class ContextObserver {
         this.settings = settings;
     }
 
-    onActiveLeafChange(leaf: WorkspaceLeaf | null) {
-        console.log("[ContextObserver] onActiveLeafChange called");
+    onActiveLeafChange(leaf: WorkspaceLeaf | null, forceUpdate: boolean = false) {
+        console.log("[ContextObserver] onActiveLeafChange called, forceUpdate:", forceUpdate);
         if (!leaf || !leaf.view) return;
 
         if (leaf.view instanceof FileView) {
@@ -28,7 +28,12 @@ export class ContextObserver {
                 const shouldActivate = this.shouldActivate(file);
                 console.log("[ContextObserver] File:", file.path, "shouldActivate:", shouldActivate);
                 if (shouldActivate) {
-                    this.controller.activate(leaf);
+                    // If focus mode is already active and forceUpdate is true, just update
+                    if (forceUpdate && this.controller.isActive()) {
+                        this.controller.update(leaf);
+                    } else {
+                        this.controller.activate(leaf);
+                    }
                 } else {
                     this.controller.deactivate(leaf);
                 }

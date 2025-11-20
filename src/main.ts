@@ -9,6 +9,7 @@ import { TypewriterScrollEffect } from "./effects/typewriter-scroll-effect";
 import { ChromeHidingEffect } from "./effects/chrome-hiding-effect";
 import { SentenceFocusEffect } from "./effects/sentence-focus-effect";
 import { ActiveLineFocusEffect } from "./effects/active-line-focus-effect";
+import { StatisticsDisplayEffect } from "./effects/statistics-display-effect";
 
 export default class FocusModePlugin extends Plugin {
     settings: FocusModeSettings;
@@ -31,6 +32,7 @@ export default class FocusModePlugin extends Plugin {
         const chromeHidingEffect = new ChromeHidingEffect(this.app, this);
         const sentenceFocusEffect = new SentenceFocusEffect(this);
         const activeLineFocusEffect = new ActiveLineFocusEffect(this);
+        const statisticsDisplayEffect = new StatisticsDisplayEffect(this.app, this);
 
         this.controller.addEffect(zenUiEffect);
         this.controller.addEffect(paragraphDimmerEffect);
@@ -39,6 +41,7 @@ export default class FocusModePlugin extends Plugin {
         this.controller.addEffect(chromeHidingEffect);
         this.controller.addEffect(sentenceFocusEffect);
         this.controller.addEffect(activeLineFocusEffect);
+        this.controller.addEffect(statisticsDisplayEffect);
 
         // Register CM6 Extensions
         console.log("[Main] Registering CM6 Extensions");
@@ -50,6 +53,8 @@ export default class FocusModePlugin extends Plugin {
         this.registerEditorExtension(SentenceFocusEffect.extension);
         console.log("[Main] ActiveLineFocusEffect.extension:", ActiveLineFocusEffect.extension);
         this.registerEditorExtension(ActiveLineFocusEffect.extension);
+        console.log("[Main] StatisticsDisplayEffect.extension:", StatisticsDisplayEffect.extension);
+        this.registerEditorExtension(StatisticsDisplayEffect.extension);
 
         // Initialize Observer
         this.observer = new ContextObserver(this.app, this.controller, this.settings);
@@ -172,7 +177,8 @@ export default class FocusModePlugin extends Plugin {
         // Trigger a check immediately to apply new settings to current leaf
         const activeLeaf = this.app.workspace.getLeaf(false); // Get active leaf
         if (activeLeaf) {
-            this.observer.onActiveLeafChange(activeLeaf);
+            // Use forceUpdate=true to update existing focus mode instead of reactivating
+            this.observer.onActiveLeafChange(activeLeaf, true);
         }
     }
 }
