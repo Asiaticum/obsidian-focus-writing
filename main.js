@@ -570,6 +570,120 @@ SentenceFocusEffect.extension = import_view3.ViewPlugin.fromClass(
         this.decorations = this.computeDecorations(update.view);
       }
     }
+    getSentenceRange(doc, pos) {
+      const cursorLine = doc.lineAt(pos);
+      let startLineNo = cursorLine.number;
+      while (startLineNo > 1) {
+        const line = doc.line(startLineNo - 1);
+        if (line.length === 0) {
+          break;
+        }
+        startLineNo--;
+      }
+      let endLineNo = cursorLine.number;
+      while (endLineNo < doc.lines) {
+        const line = doc.line(endLineNo + 1);
+        if (line.length === 0) {
+          break;
+        }
+        endLineNo++;
+      }
+      const paragraphLines = [];
+      for (let lineNo = startLineNo; lineNo <= endLineNo; lineNo++) {
+        const line = doc.line(lineNo);
+        paragraphLines.push({ text: line.text, from: line.from, to: line.to });
+      }
+      const boundaries = this.findSentenceBoundaries(paragraphLines);
+      for (let i = 0; i < boundaries.length; i++) {
+        const boundary = boundaries[i];
+        if (pos >= boundary.from && pos <= boundary.to) {
+          return { from: boundary.from, to: boundary.to };
+        }
+      }
+      return null;
+    }
+    findSentenceBoundaries(lines) {
+      const sentences = [];
+      const sentenceEndPunctuation = /[.!?。！？]/;
+      const ellipsis = /[…]/;
+      const closingQuotes = /[」』]/;
+      const openingQuotes = /[「『]/;
+      const listMarker = /^([-*+・]|\d+\.)\s/;
+      let sentenceStart = lines.length > 0 ? lines[0].from : 0;
+      for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+        const line = lines[lineIdx];
+        const text = line.text;
+        if (listMarker.test(text) && lineIdx > 0) {
+          const prevLine = lines[lineIdx - 1];
+          sentences.push({ from: sentenceStart, to: prevLine.to });
+          sentenceStart = line.from;
+        }
+        const startsWithQuote = openingQuotes.test(text.trim()[0] || "");
+        const endsWithQuote = closingQuotes.test(text.trim()[text.trim().length - 1] || "");
+        if (startsWithQuote && endsWithQuote) {
+          for (let i = 0; i < text.length; i++) {
+            const char = text[i];
+            if (sentenceEndPunctuation.test(char)) {
+              const remainingText = text.substring(i + 1);
+              const hasClosingQuoteAfter = closingQuotes.test(remainingText);
+              const hasTextAfterQuote = remainingText.replace(/[」』\s]/g, "").length > 0;
+              if (hasClosingQuoteAfter && !hasTextAfterQuote) {
+                sentences.push({ from: sentenceStart, to: line.from + i + 1 });
+                sentenceStart = line.from + i + 1;
+              }
+            }
+          }
+          sentences.push({ from: sentenceStart, to: line.to });
+          if (lineIdx + 1 < lines.length) {
+            sentenceStart = lines[lineIdx + 1].from;
+          }
+          continue;
+        }
+        for (let i = 0; i < text.length; i++) {
+          const char = text[i];
+          if (sentenceEndPunctuation.test(char) || ellipsis.test(char)) {
+            const nextChar = i + 1 < text.length ? text[i + 1] : "";
+            if (closingQuotes.test(nextChar)) {
+              const restOfLine = text.substring(i + 2).trim();
+              if (restOfLine.length > 0) {
+                continue;
+              } else {
+                sentences.push({ from: sentenceStart, to: line.from + i + 2 });
+                sentenceStart = line.from + i + 2;
+              }
+            } else {
+              sentences.push({ from: sentenceStart, to: line.from + i + 1 });
+              sentenceStart = line.from + i + 1;
+            }
+          } else if (closingQuotes.test(char)) {
+            const restOfLine = text.substring(i + 1).trim();
+            if (restOfLine.length === 0) {
+              sentences.push({ from: sentenceStart, to: line.from + i + 1 });
+              if (lineIdx + 1 < lines.length) {
+                sentenceStart = lines[lineIdx + 1].from;
+              }
+              break;
+            }
+          }
+        }
+        if (text.trim().endsWith("\u2026") || text.trim().endsWith("\u2026\u2026")) {
+          sentences.push({ from: sentenceStart, to: line.to });
+          if (lineIdx + 1 < lines.length) {
+            sentenceStart = lines[lineIdx + 1].from;
+          }
+        }
+      }
+      if (lines.length > 0) {
+        const lastLine = lines[lines.length - 1];
+        if (sentenceStart <= lastLine.to) {
+          const lastSentence = sentences[sentences.length - 1];
+          if (!lastSentence || lastSentence.to < lastLine.to) {
+            sentences.push({ from: sentenceStart, to: lastLine.to });
+          }
+        }
+      }
+      return sentences;
+    }
     computeDecorations(view) {
       const isEnabled = view.contentDOM.closest(".focus-mode-sentence-active");
       if (!isEnabled) {
@@ -581,68 +695,10 @@ SentenceFocusEffect.extension = import_view3.ViewPlugin.fromClass(
       const activeRanges = [];
       for (const range of selection.ranges) {
         const pos = range.head;
-        const line = doc.lineAt(pos);
-        const text = line.text;
-        const relativePos = pos - line.from;
-        let start = 0;
-        let end = text.length;
-        const sentenceEndPunctuation = /[.!?。！？]/;
-        const closingQuotes = /[」』]/;
-        for (let i = relativePos - 1; i >= 0; i--) {
-          const char = text[i];
-          if (sentenceEndPunctuation.test(char)) {
-            const nextChar = i + 1 < text.length ? text[i + 1] : "";
-            const charAfterNext = i + 2 < text.length ? text[i + 2] : "";
-            if (closingQuotes.test(nextChar)) {
-              if (charAfterNext && charAfterNext.trim()) {
-                continue;
-              } else {
-                start = i + 2;
-                break;
-              }
-            } else {
-              start = i + 1;
-              break;
-            }
-          } else if (closingQuotes.test(char)) {
-            const nextChar = i + 1 < text.length ? text[i + 1] : "";
-            if (!nextChar || !nextChar.trim()) {
-              start = i + 1;
-              break;
-            }
-          }
+        const sentenceRange = this.getSentenceRange(doc, pos);
+        if (sentenceRange) {
+          activeRanges.push(sentenceRange);
         }
-        for (let i = relativePos; i < text.length; i++) {
-          const char = text[i];
-          if (sentenceEndPunctuation.test(char)) {
-            const nextChar = i + 1 < text.length ? text[i + 1] : "";
-            const charAfterNext = i + 2 < text.length ? text[i + 2] : "";
-            if (closingQuotes.test(nextChar)) {
-              if (charAfterNext && charAfterNext.trim()) {
-                continue;
-              } else {
-                end = i + 2;
-                break;
-              }
-            } else {
-              end = i + 1;
-              break;
-            }
-          } else if (closingQuotes.test(char)) {
-            let hasTextAfter = false;
-            for (let j = i + 1; j < text.length; j++) {
-              if (text[j].trim()) {
-                hasTextAfter = true;
-                break;
-              }
-            }
-            if (!hasTextAfter) {
-              end = i + 1;
-              break;
-            }
-          }
-        }
-        activeRanges.push({ from: line.from + start, to: line.from + end });
       }
       activeRanges.sort((a, b) => a.from - b.from);
       const mergedRanges = [];
