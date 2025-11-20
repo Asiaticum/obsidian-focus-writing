@@ -1,0 +1,53 @@
+/* Paragraph Focus Effect */
+.focus-mode-dimmed {
+    opacity: 0.3;
+    transition: opacity 0.2s ease-in-out;
+}
+
+/* Hide inline title in focus modes to allow typewriter scroll to work properly */
+.focus-mode-paragraph-active .inline-title,
+.focus-mode-sentence-active .inline-title,
+.focus-mode-active-line .inline-title {
+    display: none !important;
+}
+
+/* Add top padding to allow first line to scroll to center in typewriter mode */
+.focus-mode-typewriter .cm-scroller {
+    padding-top: 50vh !important;
+    padding-bottom: 50vh !important;
+}
+
+/* Ensure active line is not dimmed (if logic fails or for safety) */
+.cm-activeLine,
+.cm-line.cm-activeLine,
+.cm-active {
+    opacity: 1 !important;
+}
+
+/* Active Line Focus Effect - Dims all lines except the active line */
+/* No additional CSS needed - uses .focus-mode-dimmed from Paragraph Focus Effect */
+
+/* Frontmatter Hiding Effect */
+.focus-mode-hide-frontmatter .metadata-container,
+.focus-mode-hide-frontmatter .cm-hmd-frontmatter,
+.focus-mode-hide-frontmatter .frontmatter-container {
+    display: none !important;
+}
+
+/* Chrome Hiding Effect */
+.focus-mode-chrome-hidden .workspace-ribbon {
+    display: none !important;
+}
+
+.focus-mode-chrome-hidden .status-bar {
+    display: none !important;
+}
+
+.focus-mode-chrome-hidden .workspace-tab-header-container {
+    display: none !important;
+}
+
+/* Optional: Hide scrollbars in focus mode for cleaner look? */
+.focus-mode-chrome-hidden ::-webkit-scrollbar {
+    display: none;
+}
