@@ -245,6 +245,16 @@ var ZenUiEffect = class {
     }
   }
   update(leaf) {
+    if (this.plugin.settings.enableZenUi) {
+      if (!this.app.workspace.leftSplit.collapsed) {
+        this.app.workspace.leftSplit.collapse();
+      }
+      if (!this.app.workspace.rightSplit.collapsed) {
+        this.app.workspace.rightSplit.collapse();
+      }
+    } else {
+      this.disable(leaf);
+    }
   }
 };
 
@@ -650,6 +660,13 @@ var ChromeHidingEffect = class {
     document.body.classList.remove("focus-mode-chrome-hidden");
   }
   update(leaf) {
+    if (this.plugin.settings.enableZenUi) {
+      if (!document.body.classList.contains("focus-mode-chrome-hidden")) {
+        document.body.classList.add("focus-mode-chrome-hidden");
+      }
+    } else {
+      this.disable(leaf);
+    }
   }
 };
 
@@ -1178,6 +1195,10 @@ var FocusModePlugin = class extends import_obsidian4.Plugin {
       id: "toggle-zen-ui",
       name: "Toggle Zen UI",
       callback: async () => {
+        if (!this.controller.isActive()) {
+          new import_obsidian4.Notice("Focus Mode is not active. Enable Focus Mode first.");
+          return;
+        }
         this.settings.enableZenUi = !this.settings.enableZenUi;
         await this.saveSettings();
         const leaf = this.app.workspace.getLeaf(false);

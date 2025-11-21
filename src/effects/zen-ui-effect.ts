@@ -39,6 +39,17 @@ export class ZenUiEffect implements IFocusEffect {
     }
 
     update(leaf: WorkspaceLeaf): void {
-        // No update logic needed for this effect currently
+        if (this.plugin.settings.enableZenUi) {
+            // Collapse sidebars if not already collapsed
+            if (!this.app.workspace.leftSplit.collapsed) {
+                this.app.workspace.leftSplit.collapse();
+            }
+            if (!this.app.workspace.rightSplit.collapsed) {
+                this.app.workspace.rightSplit.collapse();
+            }
+        } else {
+            // Restore sidebars
+            this.disable(leaf);
+        }
     }
 }

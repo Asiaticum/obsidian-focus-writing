@@ -1,4 +1,4 @@
-import { Plugin, WorkspaceLeaf } from "obsidian";
+import { Plugin, WorkspaceLeaf, Notice } from "obsidian";
 import { FocusModeSettings, DEFAULT_SETTINGS, FocusModeSettingTab } from "./settings";
 import { FocusController } from "./focus-controller";
 import { ContextObserver } from "./context-observer";
@@ -128,6 +128,10 @@ export default class FocusModePlugin extends Plugin {
             id: "toggle-zen-ui",
             name: "Toggle Zen UI",
             callback: async () => {
+                if (!this.controller.isActive()) {
+                    new Notice("Focus Mode is not active. Enable Focus Mode first.");
+                    return;
+                }
                 this.settings.enableZenUi = !this.settings.enableZenUi;
                 await this.saveSettings();
                 const leaf = this.app.workspace.getLeaf(false);

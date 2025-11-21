@@ -30,5 +30,12 @@ export class ChromeHidingEffect implements IFocusEffect {
     }
 
     update(leaf: WorkspaceLeaf): void {
+        if (this.plugin.settings.enableZenUi) {
+            if (!document.body.classList.contains("focus-mode-chrome-hidden")) {
+                document.body.classList.add("focus-mode-chrome-hidden");
+            }
+        } else {
+            this.disable(leaf);
+        }
     }
 }
