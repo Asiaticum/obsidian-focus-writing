@@ -36,10 +36,12 @@ var DEFAULT_SETTINGS = {
   visualEffect: "paragraph",
   enableTypewriterScroll: false,
   typewriterOffset: 30,
+  typewriterScrollSpeed: 500,
   enableFrontmatterHiding: true,
   enableZenUi: true,
   enableStatisticsDisplay: true,
-  statisticsToShow: ["characters", "words"]
+  statisticsToShow: ["characters", "words"],
+  language: "ja"
 };
 var FocusModeSettingTab = class extends import_obsidian.PluginSettingTab {
   constructor(app, plugin) {
@@ -48,61 +50,78 @@ var FocusModeSettingTab = class extends import_obsidian.PluginSettingTab {
   }
   display() {
     const { containerEl } = this;
+    const t = (key) => {
+      const lang = this.plugin.settings.language || "ja";
+      return translations[lang][key] || translations["en"][key];
+    };
     containerEl.empty();
-    containerEl.createEl("h2", { text: "Focus Mode Settings" });
-    new import_obsidian.Setting(containerEl).setName("Focus Folder Paths").setDesc("Folders where focus mode should be automatically enabled (one per line)").addTextArea(
+    containerEl.createEl("h2", { text: t("settingsHeader") });
+    new import_obsidian.Setting(containerEl).setName(t("languageName")).setDesc(t("languageDesc")).addDropdown(
+      (dropdown) => dropdown.addOption("ja", "\u65E5\u672C\u8A9E").addOption("en", "English").setValue(this.plugin.settings.language).onChange(async (value) => {
+        this.plugin.settings.language = value;
+        await this.plugin.saveSettings();
+        this.display();
+      })
+    );
+    new import_obsidian.Setting(containerEl).setName(t("focusFolderPathsName")).setDesc(t("focusFolderPathsDesc")).addTextArea(
       (text) => text.setPlaceholder("Journal\nProjects/Novel").setValue(this.plugin.settings.focusFolderPaths.join("\n")).onChange(async (value) => {
         this.plugin.settings.focusFolderPaths = value.split("\n").map((path) => path.trim()).filter((path) => path.length > 0);
         await this.plugin.saveSettings();
       })
     );
-    containerEl.createEl("h3", { text: "Visual Effects" });
-    new import_obsidian.Setting(containerEl).setName("Focus Style").setDesc("Select the visual focus style").addDropdown(
-      (dropdown) => dropdown.addOption("none", "None").addOption("paragraph", "Paragraph Focus").addOption("sentence", "Sentence Focus").addOption("active-line", "Active Line Focus").setValue(this.plugin.settings.visualEffect).onChange(async (value) => {
+    containerEl.createEl("h3", { text: t("visualEffectsHeader") });
+    new import_obsidian.Setting(containerEl).setName(t("focusStyleName")).setDesc(t("focusStyleDesc")).addDropdown(
+      (dropdown) => dropdown.addOption("none", t("focusStyleNone")).addOption("paragraph", t("focusStyleParagraph")).addOption("sentence", t("focusStyleSentence")).addOption("active-line", t("focusStyleActiveLine")).setValue(this.plugin.settings.visualEffect).onChange(async (value) => {
         this.plugin.settings.visualEffect = value;
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian.Setting(containerEl).setName("Hide Frontmatter").setDesc("Hide YAML frontmatter in focus mode").addToggle(
+    new import_obsidian.Setting(containerEl).setName(t("hideFrontmatterName")).setDesc(t("hideFrontmatterDesc")).addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.enableFrontmatterHiding).onChange(async (value) => {
         this.plugin.settings.enableFrontmatterHiding = value;
         await this.plugin.saveSettings();
       })
     );
-    containerEl.createEl("h3", { text: "Scroll & UI" });
-    new import_obsidian.Setting(containerEl).setName("Typewriter Scroll").setDesc("Keep cursor centered vertically").addToggle(
+    containerEl.createEl("h3", { text: t("scrollUiHeader") });
+    new import_obsidian.Setting(containerEl).setName(t("typewriterScrollName")).setDesc(t("typewriterScrollDesc")).addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.enableTypewriterScroll).onChange(async (value) => {
         this.plugin.settings.enableTypewriterScroll = value;
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian.Setting(containerEl).setName("Typewriter Offset").setDesc("Vertical position of the cursor (0% = top, 50% = center, 100% = bottom)").addSlider(
+    new import_obsidian.Setting(containerEl).setName(t("typewriterOffsetName")).setDesc(t("typewriterOffsetDesc")).addSlider(
       (slider) => slider.setLimits(0, 100, 5).setValue(this.plugin.settings.typewriterOffset).setDynamicTooltip().onChange(async (value) => {
         this.plugin.settings.typewriterOffset = value;
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian.Setting(containerEl).setName("Zen UI").setDesc("Hide sidebars and other UI elements").addToggle(
+    new import_obsidian.Setting(containerEl).setName(t("typewriterScrollSpeedName")).setDesc(t("typewriterScrollSpeedDesc")).addSlider(
+      (slider) => slider.setLimits(0, 1e3, 50).setValue(this.plugin.settings.typewriterScrollSpeed).setDynamicTooltip().onChange(async (value) => {
+        this.plugin.settings.typewriterScrollSpeed = value;
+        await this.plugin.saveSettings();
+      })
+    );
+    new import_obsidian.Setting(containerEl).setName(t("zenUiName")).setDesc(t("zenUiDesc")).addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.enableZenUi).onChange(async (value) => {
         this.plugin.settings.enableZenUi = value;
         await this.plugin.saveSettings();
       })
     );
-    containerEl.createEl("h3", { text: "Statistics Display" });
-    new import_obsidian.Setting(containerEl).setName("Show Statistics").setDesc("Display writing statistics in the bottom-right corner").addToggle(
+    containerEl.createEl("h3", { text: t("statisticsDisplayHeader") });
+    new import_obsidian.Setting(containerEl).setName(t("showStatisticsName")).setDesc(t("showStatisticsDesc")).addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.enableStatisticsDisplay).onChange(async (value) => {
         this.plugin.settings.enableStatisticsDisplay = value;
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian.Setting(containerEl).setName("Statistics to Display").setDesc("Select which statistics to show").setClass("statistics-checkboxes");
+    new import_obsidian.Setting(containerEl).setName(t("statisticsToDisplayName")).setDesc(t("statisticsToDisplayDesc")).setClass("statistics-checkboxes");
     const statisticsContainer = containerEl.createDiv({ cls: "statistics-options" });
     const statisticOptions = [
-      { key: "characters", label: "\u6587\u5B57\u6570\uFF08\u30B9\u30DA\u30FC\u30B9\u542B\u3080\uFF09" },
-      { key: "charactersNoSpaces", label: "\u6587\u5B57\u6570\uFF08\u30B9\u30DA\u30FC\u30B9\u9664\u304F\uFF09" },
-      { key: "words", label: "\u5358\u8A9E\u6570" },
-      { key: "lines", label: "\u884C\u6570" },
-      { key: "paragraphs", label: "\u6BB5\u843D\u6570" }
+      { key: "characters", label: t("statCharacters") },
+      { key: "charactersNoSpaces", label: t("statCharactersNoSpaces") },
+      { key: "words", label: t("statWords") },
+      { key: "lines", label: t("statLines") },
+      { key: "paragraphs", label: t("statParagraphs") }
     ];
     statisticOptions.forEach((option) => {
       new import_obsidian.Setting(statisticsContainer).setName(option.label).addToggle(
@@ -120,6 +139,78 @@ var FocusModeSettingTab = class extends import_obsidian.PluginSettingTab {
         })
       );
     });
+  }
+};
+var translations = {
+  en: {
+    settingsHeader: "Focus Mode Settings",
+    languageName: "Language",
+    languageDesc: "Select the language for the settings",
+    focusFolderPathsName: "Focus Folder Paths",
+    focusFolderPathsDesc: "Folders where focus mode should be automatically enabled (one per line)",
+    visualEffectsHeader: "Visual Effects",
+    focusStyleName: "Focus Style",
+    focusStyleDesc: "Select the visual focus style",
+    focusStyleNone: "None",
+    focusStyleParagraph: "Paragraph Focus",
+    focusStyleSentence: "Sentence Focus",
+    focusStyleActiveLine: "Active Line Focus",
+    hideFrontmatterName: "Hide Frontmatter",
+    hideFrontmatterDesc: "Hide YAML frontmatter in focus mode",
+    scrollUiHeader: "Scroll & UI",
+    typewriterScrollName: "Typewriter Scroll",
+    typewriterScrollDesc: "Keep cursor centered vertically",
+    typewriterOffsetName: "Typewriter Offset",
+    typewriterOffsetDesc: "Vertical position of the cursor (0% = top, 50% = center, 100% = bottom)",
+    typewriterScrollSpeedName: "Typewriter Scroll Speed",
+    typewriterScrollSpeedDesc: "Speed of the scrolling animation (ms)",
+    zenUiName: "Zen UI",
+    zenUiDesc: "Hide sidebars and other UI elements",
+    statisticsDisplayHeader: "Statistics Display",
+    showStatisticsName: "Show Statistics",
+    showStatisticsDesc: "Display writing statistics in the bottom-right corner",
+    statisticsToDisplayName: "Statistics to Display",
+    statisticsToDisplayDesc: "Select which statistics to show",
+    statCharacters: "Characters (with spaces)",
+    statCharactersNoSpaces: "Characters (no spaces)",
+    statWords: "Words",
+    statLines: "Lines",
+    statParagraphs: "Paragraphs"
+  },
+  ja: {
+    settingsHeader: "\u30D5\u30A9\u30FC\u30AB\u30B9\u30E2\u30FC\u30C9\u8A2D\u5B9A",
+    languageName: "\u8A00\u8A9E",
+    languageDesc: "\u8A2D\u5B9A\u753B\u9762\u306E\u8A00\u8A9E\u3092\u9078\u629E\u3057\u307E\u3059",
+    focusFolderPathsName: "\u6709\u52B9\u306B\u3059\u308B\u30D5\u30A9\u30EB\u30C0",
+    focusFolderPathsDesc: "\u30D5\u30A9\u30FC\u30AB\u30B9\u30E2\u30FC\u30C9\u3092\u81EA\u52D5\u7684\u306B\u6709\u52B9\u306B\u3059\u308B\u30D5\u30A9\u30EB\u30C0\uFF081\u884C\u306B1\u3064\uFF09",
+    visualEffectsHeader: "\u8996\u899A\u52B9\u679C",
+    focusStyleName: "\u30D5\u30A9\u30FC\u30AB\u30B9\u30B9\u30BF\u30A4\u30EB",
+    focusStyleDesc: "\u6307\u5B9A\u3057\u305F\u30D5\u30A9\u30FC\u30AB\u30B9\u30BF\u30A4\u30D7\u4EE5\u5916\u306E\u30C6\u30AD\u30B9\u30C8\u304C\u8584\u304F\u8868\u793A\u3055\u308C\u307E\u3059",
+    focusStyleNone: "\u306A\u3057",
+    focusStyleParagraph: "\u6BB5\u843D\u30D5\u30A9\u30FC\u30AB\u30B9",
+    focusStyleSentence: "\u6587\u30D5\u30A9\u30FC\u30AB\u30B9",
+    focusStyleActiveLine: "\u30A2\u30AF\u30C6\u30A3\u30D6\u884C\u30D5\u30A9\u30FC\u30AB\u30B9",
+    hideFrontmatterName: "\u30D5\u30ED\u30F3\u30C8\u30DE\u30BF\u30FC\u3092\u96A0\u3059",
+    hideFrontmatterDesc: "\u30D5\u30A9\u30FC\u30AB\u30B9\u30E2\u30FC\u30C9\u4E2D\u306BYAML\u30D5\u30ED\u30F3\u30C8\u30DE\u30BF\u30FC\u3092\u96A0\u3057\u307E\u3059",
+    scrollUiHeader: "\u30B9\u30AF\u30ED\u30FC\u30EB\u3068UI",
+    typewriterScrollName: "\u30BF\u30A4\u30D7\u30E9\u30A4\u30BF\u30FC\u30B9\u30AF\u30ED\u30FC\u30EB",
+    typewriterScrollDesc: "\u30AB\u30FC\u30BD\u30EB\u304C\u4F4D\u7F6E\u3057\u3066\u3044\u308B\u884C\u3092\u81EA\u52D5\u7684\u306B\u753B\u9762\u4E2D\u592E\u90E8\u306B\u79FB\u52D5\u3057\u307E\u3059",
+    typewriterOffsetName: "\u30BF\u30A4\u30D7\u30E9\u30A4\u30BF\u30FC\u30AA\u30D5\u30BB\u30C3\u30C8",
+    typewriterOffsetDesc: "\u753B\u9762\u4E2D\u592E\u90E8\u306B\u8868\u793A\u3059\u308B\u884C\u306E\u5782\u76F4\u4F4D\u7F6E\uFF080%=\u4E0A\u90E8\u300150%=\u4E2D\u592E\u3001100%=\u4E0B\u90E8\uFF09",
+    typewriterScrollSpeedName: "\u30BF\u30A4\u30D7\u30E9\u30A4\u30BF\u30FC\u30B9\u30AF\u30ED\u30FC\u30EB\u901F\u5EA6",
+    typewriterScrollSpeedDesc: "\u30B9\u30AF\u30ED\u30FC\u30EB\u30A2\u30CB\u30E1\u30FC\u30B7\u30E7\u30F3\u306E\u901F\u5EA6\uFF08\u30DF\u30EA\u79D2\uFF09",
+    zenUiName: "Zen UI",
+    zenUiDesc: "\u30B5\u30A4\u30C9\u30D0\u30FC\u3084\u305D\u306E\u4ED6\u306EUI\u8981\u7D20\u3092\u96A0\u3057\u307E\u3059",
+    statisticsDisplayHeader: "\u7D71\u8A08\u8868\u793A",
+    showStatisticsName: "\u7D71\u8A08\u3092\u8868\u793A",
+    showStatisticsDesc: "\u53F3\u4E0B\u306B\u57F7\u7B46\u7D71\u8A08\u3092\u8868\u793A\u3057\u307E\u3059",
+    statisticsToDisplayName: "\u8868\u793A\u3059\u308B\u7D71\u8A08",
+    statisticsToDisplayDesc: "\u8868\u793A\u3059\u308B\u7D71\u8A08\u3092\u9078\u629E\u3057\u307E\u3059",
+    statCharacters: "\u6587\u5B57\u6570\uFF08\u30B9\u30DA\u30FC\u30B9\u542B\u3080\uFF09",
+    statCharactersNoSpaces: "\u6587\u5B57\u6570\uFF08\u30B9\u30DA\u30FC\u30B9\u9664\u304F\uFF09",
+    statWords: "\u5358\u8A9E\u6570",
+    statLines: "\u884C\u6570",
+    statParagraphs: "\u6BB5\u843D\u6570"
   }
 };
 
@@ -438,6 +529,18 @@ var FrontmatterHidingEffect = class {
 
 // src/effects/typewriter-scroll-effect.ts
 var import_view2 = require("@codemirror/view");
+var scrollStateMap = /* @__PURE__ */ new WeakMap();
+function getScrollState(view) {
+  let state = scrollStateMap.get(view);
+  if (!state) {
+    state = { animationFrameId: null };
+    scrollStateMap.set(view, state);
+  }
+  return state;
+}
+function easeOutCubic(t) {
+  return 1 - Math.pow(1 - t, 3);
+}
 var dragStateMap = /* @__PURE__ */ new WeakMap();
 function getDragState(view) {
   let state = dragStateMap.get(view);
@@ -497,11 +600,36 @@ function stopAutoScroll(view, dragState) {
     }
   }
 }
-function performTypewriterScroll(view, offsetPercent) {
+function smoothScrollTo(view, targetTop, duration = 200) {
+  const scrollState = getScrollState(view);
+  if (scrollState.animationFrameId !== null) {
+    cancelAnimationFrame(scrollState.animationFrameId);
+    scrollState.animationFrameId = null;
+  }
+  const startTop = view.scrollDOM.scrollTop;
+  const distance = targetTop - startTop;
+  if (Math.abs(distance) < 1) {
+    view.scrollDOM.scrollTop = targetTop;
+    return;
+  }
+  const startTime = performance.now();
+  function step(currentTime) {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    const ease = easeOutCubic(progress);
+    view.scrollDOM.scrollTop = startTop + distance * ease;
+    if (progress < 1) {
+      scrollState.animationFrameId = requestAnimationFrame(step);
+    } else {
+      scrollState.animationFrameId = null;
+    }
+  }
+  scrollState.animationFrameId = requestAnimationFrame(step);
+}
+function performTypewriterScroll(view, offsetPercent, speed) {
   const cursorPos = view.state.selection.main.head;
   const cursorCoords = view.coordsAtPos(cursorPos);
   if (!cursorCoords) {
-    console.log("[TypewriterScroll Extension] No cursor coords");
     return;
   }
   const viewportHeight = view.scrollDOM.clientHeight;
@@ -509,20 +637,9 @@ function performTypewriterScroll(view, offsetPercent) {
   const cursorRelativeToViewport = cursorCoords.top - view.scrollDOM.getBoundingClientRect().top;
   const targetPosition = viewportHeight * (offsetPercent / 100);
   const scrollAdjustment = cursorRelativeToViewport - targetPosition;
-  console.log(
-    "[TypewriterScroll Extension] Scrolling - cursorY:",
-    cursorRelativeToViewport,
-    "target:",
-    targetPosition,
-    "adjustment:",
-    scrollAdjustment
-  );
   if (Math.abs(scrollAdjustment) > 1) {
     const newScrollTop = scrollTop + scrollAdjustment;
-    view.scrollDOM.scrollTo({
-      top: newScrollTop,
-      behavior: "smooth"
-    });
+    smoothScrollTo(view, newScrollTop, speed);
   }
 }
 var eventListenersMap = /* @__PURE__ */ new WeakMap();
@@ -548,7 +665,8 @@ function setupMouseEventListeners(view, contentEl) {
       if (dragState.hasPendingScroll) {
         dragState.hasPendingScroll = false;
         const offsetPercent = parseInt(contentEl.dataset.typewriterOffset || "50", 10);
-        performTypewriterScroll(view, offsetPercent);
+        const speed = parseInt(contentEl.dataset.typewriterScrollSpeed || "500", 10);
+        performTypewriterScroll(view, offsetPercent, speed);
       }
     }
   };
@@ -587,9 +705,12 @@ var TypewriterScrollEffect = class {
       const contentEl = leaf.view.contentEl;
       contentEl.classList.add("focus-mode-typewriter");
       contentEl.dataset.typewriterOffset = this.plugin.settings.typewriterOffset.toString();
+      contentEl.dataset.typewriterScrollSpeed = this.plugin.settings.typewriterScrollSpeed.toString();
       console.log(
         "[TypewriterScroll] Enabled - added class 'focus-mode-typewriter', offset:",
-        this.plugin.settings.typewriterOffset
+        this.plugin.settings.typewriterOffset,
+        "speed:",
+        this.plugin.settings.typewriterScrollSpeed
       );
       editor.requestMeasure();
     } else {
@@ -605,6 +726,7 @@ var TypewriterScrollEffect = class {
     }
     contentEl.classList.remove("focus-mode-typewriter");
     delete contentEl.dataset.typewriterOffset;
+    delete contentEl.dataset.typewriterScrollSpeed;
   }
   update(leaf) {
     const contentEl = leaf.view.contentEl;
@@ -613,6 +735,7 @@ var TypewriterScrollEffect = class {
         this.enable(leaf);
       } else {
         contentEl.dataset.typewriterOffset = this.plugin.settings.typewriterOffset.toString();
+        contentEl.dataset.typewriterScrollSpeed = this.plugin.settings.typewriterScrollSpeed.toString();
       }
     } else {
       this.disable(leaf);
@@ -642,7 +765,8 @@ TypewriterScrollEffect.extension = import_view2.EditorView.updateListener.of((up
     return;
   }
   const offsetPercent = parseInt(contentEl.dataset.typewriterOffset || "50", 10);
-  performTypewriterScroll(update.view, offsetPercent);
+  const speed = parseInt(contentEl.dataset.typewriterScrollSpeed || "500", 10);
+  performTypewriterScroll(update.view, offsetPercent, speed);
 });
 
 // src/effects/chrome-hiding-effect.ts

@@ -9,6 +9,29 @@ interface DragState {
     autoScrollInterval: number | null;
 }
 
+// Track scroll animation state
+interface ScrollState {
+    animationFrameId: number | null;
+}
+
+// WeakMap to store scroll state per editor instance
+const scrollStateMap = new WeakMap<EditorView, ScrollState>();
+
+function getScrollState(view: EditorView): ScrollState {
+    let state = scrollStateMap.get(view);
+    if (!state) {
+        state = { animationFrameId: null };
+        scrollStateMap.set(view, state);
+    }
+    return state;
+}
+
+// Easing function for smooth animation (EaseOutCubic for snappy start)
+function easeOutCubic(t: number): number {
+    return 1 - Math.pow(1 - t, 3);
+}
+
+
 // WeakMap to store drag state per editor instance
 const dragStateMap = new WeakMap<EditorView, DragState>();
 
@@ -87,14 +110,52 @@ function stopAutoScroll(view: EditorView, dragState: DragState): void {
     }
 }
 
+// Custom smooth scroll implementation
+function smoothScrollTo(view: EditorView, targetTop: number, duration: number = 200): void {
+    const scrollState = getScrollState(view);
+
+    // Cancel any pending scroll animation
+    if (scrollState.animationFrameId !== null) {
+        cancelAnimationFrame(scrollState.animationFrameId);
+        scrollState.animationFrameId = null;
+    }
+
+    const startTop = view.scrollDOM.scrollTop;
+    const distance = targetTop - startTop;
+
+    // If distance is very small, just jump
+    if (Math.abs(distance) < 1) {
+        view.scrollDOM.scrollTop = targetTop;
+        return;
+    }
+
+    const startTime = performance.now();
+
+    function step(currentTime: number) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const ease = easeOutCubic(progress);
+
+        view.scrollDOM.scrollTop = startTop + (distance * ease);
+
+        if (progress < 1) {
+            scrollState.animationFrameId = requestAnimationFrame(step);
+        } else {
+            scrollState.animationFrameId = null;
+        }
+    }
+
+    scrollState.animationFrameId = requestAnimationFrame(step);
+}
+
 // Perform the actual scroll to center cursor
-function performTypewriterScroll(view: EditorView, offsetPercent: number): void {
+function performTypewriterScroll(view: EditorView, offsetPercent: number, speed: number): void {
     // Get cursor position
     const cursorPos = view.state.selection.main.head;
     const cursorCoords = view.coordsAtPos(cursorPos);
 
     if (!cursorCoords) {
-        console.log("[TypewriterScroll Extension] No cursor coords");
+        // console.log("[TypewriterScroll Extension] No cursor coords");
         return;
     }
 
@@ -111,16 +172,15 @@ function performTypewriterScroll(view: EditorView, offsetPercent: number): void 
     // Calculate scroll adjustment needed
     const scrollAdjustment = cursorRelativeToViewport - targetPosition;
 
-    console.log("[TypewriterScroll Extension] Scrolling - cursorY:", cursorRelativeToViewport,
-        "target:", targetPosition, "adjustment:", scrollAdjustment);
+    // console.log("[TypewriterScroll Extension] Scrolling - cursorY:", cursorRelativeToViewport,
+    //    "target:", targetPosition, "adjustment:", scrollAdjustment);
 
     // Apply smooth scroll with animation
     if (Math.abs(scrollAdjustment) > 1) {
         const newScrollTop = scrollTop + scrollAdjustment;
-        view.scrollDOM.scrollTo({
-            top: newScrollTop,
-            behavior: 'smooth'
-        });
+
+        // Use custom smooth scroll instead of native behavior
+        smoothScrollTo(view, newScrollTop, speed);
     }
 }
 
@@ -167,7 +227,8 @@ function setupMouseEventListeners(view: EditorView, contentEl: HTMLElement): voi
             if (dragState.hasPendingScroll) {
                 dragState.hasPendingScroll = false;
                 const offsetPercent = parseInt(contentEl.dataset.typewriterOffset || "50", 10);
-                performTypewriterScroll(view, offsetPercent);
+                const speed = parseInt(contentEl.dataset.typewriterScrollSpeed || "500", 10);
+                performTypewriterScroll(view, offsetPercent, speed);
             }
         }
     };
@@ -221,11 +282,12 @@ export class TypewriterScrollEffect implements IFocusEffect {
             const contentEl = (leaf.view as ItemView).contentEl;
             contentEl.classList.add("focus-mode-typewriter");
 
-            // Store the offset in a data attribute so the extension can read it
+            // Store the offset and speed in data attributes
             contentEl.dataset.typewriterOffset = this.plugin.settings.typewriterOffset.toString();
+            contentEl.dataset.typewriterScrollSpeed = this.plugin.settings.typewriterScrollSpeed.toString();
 
             console.log("[TypewriterScroll] Enabled - added class 'focus-mode-typewriter', offset:",
-                this.plugin.settings.typewriterOffset);
+                this.plugin.settings.typewriterOffset, "speed:", this.plugin.settings.typewriterScrollSpeed);
 
             // Force a measure to update margins immediately
             editor.requestMeasure();
@@ -246,6 +308,7 @@ export class TypewriterScrollEffect implements IFocusEffect {
 
         contentEl.classList.remove("focus-mode-typewriter");
         delete contentEl.dataset.typewriterOffset;
+        delete contentEl.dataset.typewriterScrollSpeed;
     }
 
     update(leaf: WorkspaceLeaf): void {
@@ -255,8 +318,9 @@ export class TypewriterScrollEffect implements IFocusEffect {
             if (!contentEl.classList.contains("focus-mode-typewriter")) {
                 this.enable(leaf);
             } else {
-                // Update offset attribute
+                // Update offset and speed attributes
                 contentEl.dataset.typewriterOffset = this.plugin.settings.typewriterOffset.toString();
+                contentEl.dataset.typewriterScrollSpeed = this.plugin.settings.typewriterScrollSpeed.toString();
             }
         } else {
             this.disable(leaf);
@@ -290,6 +354,7 @@ export class TypewriterScrollEffect implements IFocusEffect {
 
         // Not dragging, execute scroll immediately
         const offsetPercent = parseInt(contentEl.dataset.typewriterOffset || "50", 10);
-        performTypewriterScroll(update.view, offsetPercent);
+        const speed = parseInt(contentEl.dataset.typewriterScrollSpeed || "500", 10);
+        performTypewriterScroll(update.view, offsetPercent, speed);
     });
 }

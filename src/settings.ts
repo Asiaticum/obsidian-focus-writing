@@ -8,10 +8,12 @@ export interface FocusModeSettings {
     visualEffect: VisualEffectType;
     enableTypewriterScroll: boolean;
     typewriterOffset: number; // 0-100 percentage
+    typewriterScrollSpeed: number; // milliseconds
     enableFrontmatterHiding: boolean;
     enableZenUi: boolean;
     enableStatisticsDisplay: boolean;
     statisticsToShow: StatisticType[];
+    language: 'en' | 'ja';
 }
 
 export const DEFAULT_SETTINGS: FocusModeSettings = {
@@ -19,10 +21,12 @@ export const DEFAULT_SETTINGS: FocusModeSettings = {
     visualEffect: "paragraph",
     enableTypewriterScroll: false,
     typewriterOffset: 30,
+    typewriterScrollSpeed: 500,
     enableFrontmatterHiding: true,
     enableZenUi: true,
     enableStatisticsDisplay: true,
-    statisticsToShow: ["characters", "words"]
+    statisticsToShow: ["characters", "words"],
+    language: 'ja'
 };
 
 interface IFocusModePlugin extends Plugin {
@@ -40,14 +44,33 @@ export class FocusModeSettingTab extends PluginSettingTab {
 
     display(): void {
         const { containerEl } = this;
+        const t = (key: keyof typeof translations['en']) => {
+            const lang = this.plugin.settings.language || 'ja';
+            return translations[lang][key] || translations['en'][key];
+        };
 
         containerEl.empty();
 
-        containerEl.createEl("h2", { text: "Focus Mode Settings" });
+        containerEl.createEl("h2", { text: t('settingsHeader') });
 
         new Setting(containerEl)
-            .setName("Focus Folder Paths")
-            .setDesc("Folders where focus mode should be automatically enabled (one per line)")
+            .setName(t('languageName'))
+            .setDesc(t('languageDesc'))
+            .addDropdown((dropdown) =>
+                dropdown
+                    .addOption("ja", "日本語")
+                    .addOption("en", "English")
+                    .setValue(this.plugin.settings.language)
+                    .onChange(async (value) => {
+                        this.plugin.settings.language = value as 'en' | 'ja';
+                        await this.plugin.saveSettings();
+                        this.display(); // Refresh settings to show new language
+                    })
+            );
+
+        new Setting(containerEl)
+            .setName(t('focusFolderPathsName'))
+            .setDesc(t('focusFolderPathsDesc'))
             .addTextArea((text) =>
                 text
                     .setPlaceholder("Journal\nProjects/Novel")
@@ -61,17 +84,17 @@ export class FocusModeSettingTab extends PluginSettingTab {
                     })
             );
 
-        containerEl.createEl("h3", { text: "Visual Effects" });
+        containerEl.createEl("h3", { text: t('visualEffectsHeader') });
 
         new Setting(containerEl)
-            .setName("Focus Style")
-            .setDesc("Select the visual focus style")
+            .setName(t('focusStyleName'))
+            .setDesc(t('focusStyleDesc'))
             .addDropdown((dropdown) =>
                 dropdown
-                    .addOption("none", "None")
-                    .addOption("paragraph", "Paragraph Focus")
-                    .addOption("sentence", "Sentence Focus")
-                    .addOption("active-line", "Active Line Focus")
+                    .addOption("none", t('focusStyleNone'))
+                    .addOption("paragraph", t('focusStyleParagraph'))
+                    .addOption("sentence", t('focusStyleSentence'))
+                    .addOption("active-line", t('focusStyleActiveLine'))
                     .setValue(this.plugin.settings.visualEffect)
                     .onChange(async (value) => {
                         this.plugin.settings.visualEffect = value as VisualEffectType;
@@ -80,8 +103,8 @@ export class FocusModeSettingTab extends PluginSettingTab {
             );
 
         new Setting(containerEl)
-            .setName("Hide Frontmatter")
-            .setDesc("Hide YAML frontmatter in focus mode")
+            .setName(t('hideFrontmatterName'))
+            .setDesc(t('hideFrontmatterDesc'))
             .addToggle((toggle) =>
                 toggle
                     .setValue(this.plugin.settings.enableFrontmatterHiding)
@@ -91,11 +114,11 @@ export class FocusModeSettingTab extends PluginSettingTab {
                     })
             );
 
-        containerEl.createEl("h3", { text: "Scroll & UI" });
+        containerEl.createEl("h3", { text: t('scrollUiHeader') });
 
         new Setting(containerEl)
-            .setName("Typewriter Scroll")
-            .setDesc("Keep cursor centered vertically")
+            .setName(t('typewriterScrollName'))
+            .setDesc(t('typewriterScrollDesc'))
             .addToggle((toggle) =>
                 toggle
                     .setValue(this.plugin.settings.enableTypewriterScroll)
@@ -106,8 +129,8 @@ export class FocusModeSettingTab extends PluginSettingTab {
             );
 
         new Setting(containerEl)
-            .setName("Typewriter Offset")
-            .setDesc("Vertical position of the cursor (0% = top, 50% = center, 100% = bottom)")
+            .setName(t('typewriterOffsetName'))
+            .setDesc(t('typewriterOffsetDesc'))
             .addSlider((slider) =>
                 slider
                     .setLimits(0, 100, 5)
@@ -120,8 +143,22 @@ export class FocusModeSettingTab extends PluginSettingTab {
             );
 
         new Setting(containerEl)
-            .setName("Zen UI")
-            .setDesc("Hide sidebars and other UI elements")
+            .setName(t('typewriterScrollSpeedName'))
+            .setDesc(t('typewriterScrollSpeedDesc'))
+            .addSlider((slider) =>
+                slider
+                    .setLimits(0, 1000, 50)
+                    .setValue(this.plugin.settings.typewriterScrollSpeed)
+                    .setDynamicTooltip()
+                    .onChange(async (value) => {
+                        this.plugin.settings.typewriterScrollSpeed = value;
+                        await this.plugin.saveSettings();
+                    })
+            );
+
+        new Setting(containerEl)
+            .setName(t('zenUiName'))
+            .setDesc(t('zenUiDesc'))
             .addToggle((toggle) =>
                 toggle
                     .setValue(this.plugin.settings.enableZenUi)
@@ -131,11 +168,11 @@ export class FocusModeSettingTab extends PluginSettingTab {
                     })
             );
 
-        containerEl.createEl("h3", { text: "Statistics Display" });
+        containerEl.createEl("h3", { text: t('statisticsDisplayHeader') });
 
         new Setting(containerEl)
-            .setName("Show Statistics")
-            .setDesc("Display writing statistics in the bottom-right corner")
+            .setName(t('showStatisticsName'))
+            .setDesc(t('showStatisticsDesc'))
             .addToggle((toggle) =>
                 toggle
                     .setValue(this.plugin.settings.enableStatisticsDisplay)
@@ -146,18 +183,18 @@ export class FocusModeSettingTab extends PluginSettingTab {
             );
 
         new Setting(containerEl)
-            .setName("Statistics to Display")
-            .setDesc("Select which statistics to show")
+            .setName(t('statisticsToDisplayName'))
+            .setDesc(t('statisticsToDisplayDesc'))
             .setClass("statistics-checkboxes");
 
         const statisticsContainer = containerEl.createDiv({ cls: "statistics-options" });
 
         const statisticOptions = [
-            { key: "characters", label: "文字数（スペース含む）" },
-            { key: "charactersNoSpaces", label: "文字数（スペース除く）" },
-            { key: "words", label: "単語数" },
-            { key: "lines", label: "行数" },
-            { key: "paragraphs", label: "段落数" }
+            { key: "characters", label: t('statCharacters') },
+            { key: "charactersNoSpaces", label: t('statCharactersNoSpaces') },
+            { key: "words", label: t('statWords') },
+            { key: "lines", label: t('statLines') },
+            { key: "paragraphs", label: t('statParagraphs') }
         ];
 
         statisticOptions.forEach((option) => {
@@ -182,3 +219,76 @@ export class FocusModeSettingTab extends PluginSettingTab {
         });
     }
 }
+
+const translations = {
+    en: {
+        settingsHeader: "Focus Mode Settings",
+        languageName: "Language",
+        languageDesc: "Select the language for the settings",
+        focusFolderPathsName: "Focus Folder Paths",
+        focusFolderPathsDesc: "Folders where focus mode should be automatically enabled (one per line)",
+        visualEffectsHeader: "Visual Effects",
+        focusStyleName: "Focus Style",
+        focusStyleDesc: "Select the visual focus style",
+        focusStyleNone: "None",
+        focusStyleParagraph: "Paragraph Focus",
+        focusStyleSentence: "Sentence Focus",
+        focusStyleActiveLine: "Active Line Focus",
+        hideFrontmatterName: "Hide Frontmatter",
+        hideFrontmatterDesc: "Hide YAML frontmatter in focus mode",
+        scrollUiHeader: "Scroll & UI",
+        typewriterScrollName: "Typewriter Scroll",
+        typewriterScrollDesc: "Keep cursor centered vertically",
+        typewriterOffsetName: "Typewriter Offset",
+        typewriterOffsetDesc: "Vertical position of the cursor (0% = top, 50% = center, 100% = bottom)",
+        typewriterScrollSpeedName: "Typewriter Scroll Speed",
+        typewriterScrollSpeedDesc: "Speed of the scrolling animation (ms)",
+        zenUiName: "Zen UI",
+        zenUiDesc: "Hide sidebars and other UI elements",
+        statisticsDisplayHeader: "Statistics Display",
+        showStatisticsName: "Show Statistics",
+        showStatisticsDesc: "Display writing statistics in the bottom-right corner",
+        statisticsToDisplayName: "Statistics to Display",
+        statisticsToDisplayDesc: "Select which statistics to show",
+        statCharacters: "Characters (with spaces)",
+        statCharactersNoSpaces: "Characters (no spaces)",
+        statWords: "Words",
+        statLines: "Lines",
+        statParagraphs: "Paragraphs"
+    },
+    ja: {
+        settingsHeader: "フォーカスモード設定",
+        languageName: "言語",
+        languageDesc: "設定画面の言語を選択します",
+        focusFolderPathsName: "有効にするフォルダ",
+        focusFolderPathsDesc: "フォーカスモードを自動的に有効にするフォルダ（1行に1つ）",
+        visualEffectsHeader: "視覚効果",
+        focusStyleName: "フォーカススタイル",
+        focusStyleDesc: "指定したフォーカスタイプ以外のテキストが薄く表示されます",
+        focusStyleNone: "なし",
+        focusStyleParagraph: "段落フォーカス",
+        focusStyleSentence: "文フォーカス",
+        focusStyleActiveLine: "アクティブ行フォーカス",
+        hideFrontmatterName: "フロントマターを隠す",
+        hideFrontmatterDesc: "フォーカスモード中にYAMLフロントマターを隠します",
+        scrollUiHeader: "スクロールとUI",
+        typewriterScrollName: "タイプライタースクロール",
+        typewriterScrollDesc: "カーソルが位置している行を自動的に画面中央部に移動します",
+        typewriterOffsetName: "タイプライターオフセット",
+        typewriterOffsetDesc: "画面中央部に表示する行の垂直位置（0%=上部、50%=中央、100%=下部）",
+        typewriterScrollSpeedName: "タイプライタースクロール速度",
+        typewriterScrollSpeedDesc: "スクロールアニメーションの速度（ミリ秒）",
+        zenUiName: "Zen UI",
+        zenUiDesc: "サイドバーやその他のUI要素を隠します",
+        statisticsDisplayHeader: "統計表示",
+        showStatisticsName: "統計を表示",
+        showStatisticsDesc: "右下に執筆統計を表示します",
+        statisticsToDisplayName: "表示する統計",
+        statisticsToDisplayDesc: "表示する統計を選択します",
+        statCharacters: "文字数（スペース含む）",
+        statCharactersNoSpaces: "文字数（スペース除く）",
+        statWords: "単語数",
+        statLines: "行数",
+        statParagraphs: "段落数"
+    }
+};
