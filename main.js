@@ -613,9 +613,15 @@ function smoothScrollTo(view, targetTop, duration = 200) {
     return;
   }
   scrollState.lastFrameTime = performance.now();
+  let expectedTop = view.scrollDOM.scrollTop;
   const loop = (currentTime) => {
     if (scrollState.targetTop === null) {
       scrollState.animationFrameId = null;
+      return;
+    }
+    if (Math.abs(view.scrollDOM.scrollTop - expectedTop) > 10) {
+      scrollState.animationFrameId = null;
+      scrollState.targetTop = null;
       return;
     }
     const dt = currentTime - scrollState.lastFrameTime;
@@ -633,6 +639,7 @@ function smoothScrollTo(view, targetTop, duration = 200) {
     const alpha = 1 - Math.exp(-k * safeDt);
     const newTop = currentTop + dist * alpha;
     view.scrollDOM.scrollTop = newTop;
+    expectedTop = newTop;
     scrollState.animationFrameId = requestAnimationFrame(loop);
   };
   scrollState.animationFrameId = requestAnimationFrame(loop);

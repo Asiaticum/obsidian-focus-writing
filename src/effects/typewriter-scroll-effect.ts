@@ -131,10 +131,21 @@ function smoothScrollTo(view: EditorView, targetTop: number, duration: number = 
 
     // Start animation loop
     scrollState.lastFrameTime = performance.now();
+    let expectedTop = view.scrollDOM.scrollTop;
 
     const loop = (currentTime: number) => {
         if (scrollState.targetTop === null) {
             scrollState.animationFrameId = null;
+            return;
+        }
+
+        // Check for manual scroll interruption
+        // If the current scroll position is significantly different from what we expected
+        // (allowing for small floating point errors), assume the user scrolled manually.
+        if (Math.abs(view.scrollDOM.scrollTop - expectedTop) > 10) {
+            // User interrupted
+            scrollState.animationFrameId = null;
+            scrollState.targetTop = null;
             return;
         }
 
@@ -165,6 +176,7 @@ function smoothScrollTo(view: EditorView, targetTop: number, duration: number = 
 
         const newTop = currentTop + dist * alpha;
         view.scrollDOM.scrollTop = newTop;
+        expectedTop = newTop; // Update expected position for next frame
 
         scrollState.animationFrameId = requestAnimationFrame(loop);
     };
