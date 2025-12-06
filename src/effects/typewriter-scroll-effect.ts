@@ -12,6 +12,8 @@ interface DragState {
 // Track scroll animation state
 interface ScrollState {
     animationFrameId: number | null;
+    targetTop: number | null;
+    lastFrameTime: number;
 }
 
 // WeakMap to store scroll state per editor instance
@@ -20,17 +22,11 @@ const scrollStateMap = new WeakMap<EditorView, ScrollState>();
 function getScrollState(view: EditorView): ScrollState {
     let state = scrollStateMap.get(view);
     if (!state) {
-        state = { animationFrameId: null };
+        state = { animationFrameId: null, targetTop: null, lastFrameTime: 0 };
         scrollStateMap.set(view, state);
     }
     return state;
 }
-
-// Easing function for smooth animation (EaseOutCubic for snappy start)
-function easeOutCubic(t: number): number {
-    return 1 - Math.pow(1 - t, 3);
-}
-
 
 // WeakMap to store drag state per editor instance
 const dragStateMap = new WeakMap<EditorView, DragState>();
@@ -110,42 +106,70 @@ function stopAutoScroll(view: EditorView, dragState: DragState): void {
     }
 }
 
-// Custom smooth scroll implementation
+// Continuous smooth scroll implementation (Lerp-based)
 function smoothScrollTo(view: EditorView, targetTop: number, duration: number = 200): void {
     const scrollState = getScrollState(view);
 
-    // Cancel any pending scroll animation
-    if (scrollState.animationFrameId !== null) {
-        cancelAnimationFrame(scrollState.animationFrameId);
-        scrollState.animationFrameId = null;
-    }
+    // Update target
+    scrollState.targetTop = targetTop;
 
-    const startTop = view.scrollDOM.scrollTop;
-    const distance = targetTop - startTop;
-
-    // If distance is very small, just jump
-    if (Math.abs(distance) < 1) {
+    // If duration is 0 or less, jump immediately
+    if (duration <= 0) {
+        if (scrollState.animationFrameId !== null) {
+            cancelAnimationFrame(scrollState.animationFrameId);
+            scrollState.animationFrameId = null;
+        }
         view.scrollDOM.scrollTop = targetTop;
+        scrollState.targetTop = null;
         return;
     }
 
-    const startTime = performance.now();
-
-    function step(currentTime: number) {
-        const elapsed = currentTime - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        const ease = easeOutCubic(progress);
-
-        view.scrollDOM.scrollTop = startTop + (distance * ease);
-
-        if (progress < 1) {
-            scrollState.animationFrameId = requestAnimationFrame(step);
-        } else {
-            scrollState.animationFrameId = null;
-        }
+    // If animation is already running, just let it continue pursuing the new target
+    if (scrollState.animationFrameId !== null) {
+        return;
     }
 
-    scrollState.animationFrameId = requestAnimationFrame(step);
+    // Start animation loop
+    scrollState.lastFrameTime = performance.now();
+
+    const loop = (currentTime: number) => {
+        if (scrollState.targetTop === null) {
+            scrollState.animationFrameId = null;
+            return;
+        }
+
+        const dt = currentTime - scrollState.lastFrameTime;
+        scrollState.lastFrameTime = currentTime;
+
+        // Prevent large jumps if tab was inactive
+        const safeDt = Math.min(dt, 50);
+
+        const currentTop = view.scrollDOM.scrollTop;
+        const dist = scrollState.targetTop - currentTop;
+
+        // If very close, snap and stop
+        if (Math.abs(dist) < 1) {
+            view.scrollDOM.scrollTop = scrollState.targetTop;
+            scrollState.animationFrameId = null;
+            scrollState.targetTop = null;
+            return;
+        }
+
+        // Calculate interpolation factor based on duration
+        // We want to reach approx 99% of target in 'duration' ms
+        // Formula: alpha = 1 - exp(-k * dt)
+        // where k = 4.6 / duration (since ln(0.01) ≈ -4.6)
+        // Using slightly less aggressive constant for smoother feel: 5 used below
+        const k = 5 / duration;
+        const alpha = 1 - Math.exp(-k * safeDt);
+
+        const newTop = currentTop + dist * alpha;
+        view.scrollDOM.scrollTop = newTop;
+
+        scrollState.animationFrameId = requestAnimationFrame(loop);
+    };
+
+    scrollState.animationFrameId = requestAnimationFrame(loop);
 }
 
 // Perform the actual scroll to center cursor
@@ -176,7 +200,7 @@ function performTypewriterScroll(view: EditorView, offsetPercent: number, speed:
     //    "target:", targetPosition, "adjustment:", scrollAdjustment);
 
     // Apply smooth scroll with animation
-    if (Math.abs(scrollAdjustment) > 1) {
+    if (Math.abs(scrollAdjustment) > 5) {
         const newScrollTop = scrollTop + scrollAdjustment;
 
         // Use custom smooth scroll instead of native behavior

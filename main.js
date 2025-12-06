@@ -533,13 +533,10 @@ var scrollStateMap = /* @__PURE__ */ new WeakMap();
 function getScrollState(view) {
   let state = scrollStateMap.get(view);
   if (!state) {
-    state = { animationFrameId: null };
+    state = { animationFrameId: null, targetTop: null, lastFrameTime: 0 };
     scrollStateMap.set(view, state);
   }
   return state;
-}
-function easeOutCubic(t) {
-  return 1 - Math.pow(1 - t, 3);
 }
 var dragStateMap = /* @__PURE__ */ new WeakMap();
 function getDragState(view) {
@@ -602,29 +599,43 @@ function stopAutoScroll(view, dragState) {
 }
 function smoothScrollTo(view, targetTop, duration = 200) {
   const scrollState = getScrollState(view);
-  if (scrollState.animationFrameId !== null) {
-    cancelAnimationFrame(scrollState.animationFrameId);
-    scrollState.animationFrameId = null;
-  }
-  const startTop = view.scrollDOM.scrollTop;
-  const distance = targetTop - startTop;
-  if (Math.abs(distance) < 1) {
-    view.scrollDOM.scrollTop = targetTop;
-    return;
-  }
-  const startTime = performance.now();
-  function step(currentTime) {
-    const elapsed = currentTime - startTime;
-    const progress = Math.min(elapsed / duration, 1);
-    const ease = easeOutCubic(progress);
-    view.scrollDOM.scrollTop = startTop + distance * ease;
-    if (progress < 1) {
-      scrollState.animationFrameId = requestAnimationFrame(step);
-    } else {
+  scrollState.targetTop = targetTop;
+  if (duration <= 0) {
+    if (scrollState.animationFrameId !== null) {
+      cancelAnimationFrame(scrollState.animationFrameId);
       scrollState.animationFrameId = null;
     }
+    view.scrollDOM.scrollTop = targetTop;
+    scrollState.targetTop = null;
+    return;
   }
-  scrollState.animationFrameId = requestAnimationFrame(step);
+  if (scrollState.animationFrameId !== null) {
+    return;
+  }
+  scrollState.lastFrameTime = performance.now();
+  const loop = (currentTime) => {
+    if (scrollState.targetTop === null) {
+      scrollState.animationFrameId = null;
+      return;
+    }
+    const dt = currentTime - scrollState.lastFrameTime;
+    scrollState.lastFrameTime = currentTime;
+    const safeDt = Math.min(dt, 50);
+    const currentTop = view.scrollDOM.scrollTop;
+    const dist = scrollState.targetTop - currentTop;
+    if (Math.abs(dist) < 1) {
+      view.scrollDOM.scrollTop = scrollState.targetTop;
+      scrollState.animationFrameId = null;
+      scrollState.targetTop = null;
+      return;
+    }
+    const k = 5 / duration;
+    const alpha = 1 - Math.exp(-k * safeDt);
+    const newTop = currentTop + dist * alpha;
+    view.scrollDOM.scrollTop = newTop;
+    scrollState.animationFrameId = requestAnimationFrame(loop);
+  };
+  scrollState.animationFrameId = requestAnimationFrame(loop);
 }
 function performTypewriterScroll(view, offsetPercent, speed) {
   const cursorPos = view.state.selection.main.head;
@@ -637,7 +648,7 @@ function performTypewriterScroll(view, offsetPercent, speed) {
   const cursorRelativeToViewport = cursorCoords.top - view.scrollDOM.getBoundingClientRect().top;
   const targetPosition = viewportHeight * (offsetPercent / 100);
   const scrollAdjustment = cursorRelativeToViewport - targetPosition;
-  if (Math.abs(scrollAdjustment) > 1) {
+  if (Math.abs(scrollAdjustment) > 5) {
     const newScrollTop = scrollTop + scrollAdjustment;
     smoothScrollTo(view, newScrollTop, speed);
   }
